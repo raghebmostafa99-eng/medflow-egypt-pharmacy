@@ -627,6 +627,80 @@ input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; marg
 @keyframes barShrink { to { transform: scaleX(0); } }
 
 /* ===================================================================
+   ITEM PREVIEW (single item being added)
+   =================================================================== */
+.item-preview-group {
+  margin-bottom: 16px;
+}
+
+/* ===================================================================
+   CART SECTION
+   =================================================================== */
+.cart-section {
+  margin-top: 24px;
+  border-top: 2px solid var(--border);
+  padding-top: 20px;
+}
+.cart-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.cart-header h3 {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 1rem;
+  font-weight: 700;
+}
+.cart-header h3 svg { color: var(--primary-500); }
+.cart-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--primary-600);
+  color: #fff;
+  font-size: .72rem;
+  font-weight: 700;
+  min-width: 22px; height: 22px;
+  border-radius: 12px;
+  padding: 0 6px;
+  font-family: var(--font-en);
+}
+.cart-table .cart-qty-input {
+  width: 58px;
+  padding: 5px 6px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-xs);
+  background: var(--surface-alt);
+  color: var(--text);
+  font-family: var(--font-ar);
+  font-size: .84rem;
+  text-align: center;
+  outline: none;
+  transition: border .2s, box-shadow .2s;
+}
+.cart-table .cart-qty-input:focus {
+  border-color: var(--primary-500);
+  box-shadow: var(--shadow-glow);
+}
+.cart-remove-btn {
+  background: none;
+  border: 1.5px solid rgba(239,68,68,.3);
+  color: var(--danger);
+  width: 30px; height: 30px;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all .15s var(--ease);
+  padding: 0;
+}
+.cart-remove-btn:hover {
+  background: var(--danger);
+  color: #fff;
+  border-color: var(--danger);
+}
+.cart-section .totals-group { margin-top: 16px; }
+.cart-section .form-actions { margin-top: 16px; }
+
+/* ===================================================================
    SCROLLBAR
    =================================================================== */
 ::-webkit-scrollbar { width: 5px; height: 5px; }

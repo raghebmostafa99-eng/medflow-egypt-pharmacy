@@ -35,6 +35,7 @@
   const state = {
     products: deduplicateProducts(LS.get(CFG.KEY.products, [])),
     tx: LS.get(CFG.KEY.tx, []),
+    cart: [],  // <-- NEW: cart items
   };
   function deduplicateProducts(arr) {
     const unique = [...new Set(arr.map(p => p.trim()).filter(Boolean))];
@@ -49,10 +50,13 @@
     const ids = [
       'loginScreen', 'mainApp', 'loginForm', 'passwordInput', 'togglePassword', 'loginBtn',
       'themeToggle', 'logoutBtn', 'liveClock', 'salesForm', 'productName', 'autocompleteList',
-      'quantity', 'unit', 'unitPrice', 'discount', 'notes', 'computedSubtotal', 'computedTotal',
+      'quantity', 'unit', 'unitPrice', 'discount', 'notes', 'computedSubtotal',
       'invoiceId', 'invoiceDate', 'submitSale', 'resetForm', 'totalSales', 'totalDiscounts',
       'netRevenue', 'transactionCount', 'transactionsBody', 'emptyState', 'transactionsTable',
       'clearTransactions', 'toastContainer',
+      // NEW cart elements
+      'addToCart', 'cartSection', 'cartBadge', 'cartBody', 'cartTable',
+      'cartSubtotal', 'cartTotal', 'clearCart',
     ];
     ids.forEach(id => D[id] = document.getElementById(id));
   }
@@ -319,14 +323,112 @@
     },
   };
 
+  // ======================== CART ========================
+  const Cart = {
+    init() {
+      D.clearCart.addEventListener('click', () => this.clear());
+    },
+
+    /** Add an item to the cart */
+    add(item) {
+      state.cart.push(item);
+      AC.add(item.productName);
+      this.render();
+      Toast.ok(`تم إضافة "${item.productName}" للسلة`);
+    },
+
+    /** Remove cart item by index */
+    remove(idx) {
+      state.cart.splice(idx, 1);
+      this.render();
+    },
+
+    /** Update quantity of a cart item */
+    updateQty(idx, newQty) {
+      if (newQty <= 0) { this.remove(idx); return; }
+      state.cart[idx].quantity = newQty;
+      this.render();
+    },
+
+    /** Clear the entire cart */
+    clear() {
+      if (!state.cart.length) return;
+      state.cart = [];
+      this.render();
+      Toast.info('تم إفراغ السلة');
+    },
+
+    /** Calculate cart totals */
+    totals() {
+      let subtotal = 0, totalDiscount = 0;
+      state.cart.forEach(item => {
+        const itemSub = item.quantity * item.unitPrice;
+        subtotal += itemSub;
+        totalDiscount += item.discount;
+      });
+      const net = Math.max(subtotal - totalDiscount, 0);
+      return { subtotal, totalDiscount, net };
+    },
+
+    /** Render the cart table and totals */
+    render() {
+      const hasItems = state.cart.length > 0;
+      D.cartSection.style.display = hasItems ? '' : 'none';
+      D.cartBadge.textContent = state.cart.length;
+
+      if (!hasItems) {
+        D.cartBody.innerHTML = '';
+        D.cartSubtotal.textContent = '0.00';
+        D.cartTotal.textContent = '0.00';
+        return;
+      }
+
+      D.cartBody.innerHTML = state.cart.map((item, i) => {
+        const itemSub = item.quantity * item.unitPrice;
+        const itemNet = Math.max(itemSub - item.discount, 0);
+        return `<tr class="row-new">
+          <td>${item.productName}</td>
+          <td><input type="number" class="cart-qty-input" data-idx="${i}" min="1" value="${item.quantity}"></td>
+          <td>${item.unit}</td>
+          <td>${U.fmt(item.unitPrice)}</td>
+          <td>${U.fmt(item.discount)}</td>
+          <td><strong>${U.fmt(itemNet)}</strong></td>
+          <td><button type="button" class="cart-remove-btn" data-idx="${i}" title="حذف">✕</button></td>
+        </tr>`;
+      }).join('');
+
+      // Quantity edit listeners
+      D.cartBody.querySelectorAll('.cart-qty-input').forEach(inp => {
+        inp.addEventListener('change', () => {
+          const idx = parseInt(inp.dataset.idx, 10);
+          const val = parseInt(inp.value, 10) || 0;
+          this.updateQty(idx, val);
+        });
+      });
+
+      // Remove button listeners
+      D.cartBody.querySelectorAll('.cart-remove-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const idx = parseInt(btn.dataset.idx, 10);
+          this.remove(idx);
+        });
+      });
+
+      // Update totals
+      const t = this.totals();
+      D.cartSubtotal.textContent = U.fmt(t.subtotal);
+      D.cartTotal.textContent = U.fmt(t.net);
+    },
+  };
+
   // ======================== SALES FORM ========================
   const Sales = {
     init() {
-      D.salesForm.addEventListener('submit', e => this.submit(e));
+      // Form submit now adds to cart
+      D.salesForm.addEventListener('submit', e => this.addToCart(e));
       D.salesForm.addEventListener('reset', () => {
         setTimeout(() => {
           D.computedSubtotal.textContent = '0.00';
-          D.computedTotal.textContent = '0.00';
           D.quantity.value = '1';
           D.discount.value = '0';
           Invoice.refresh();
@@ -334,80 +436,149 @@
       });
       [D.quantity, D.unitPrice, D.discount].forEach(el => el.addEventListener('input', () => this.calc()));
       D.clearTransactions.addEventListener('click', () => this.clearDay());
+
+      // Checkout button (submit entire cart)
+      D.submitSale.addEventListener('click', () => this.checkout());
+
+      // Init cart module
+      Cart.init();
     },
+
+    /** Calculate item preview (single item being composed) */
     calc() {
       const q = parseFloat(D.quantity.value) || 0;
       const p = parseFloat(D.unitPrice.value) || 0;
       const d = parseFloat(D.discount.value) || 0;
       const sub = q * p;
       const net = Math.max(sub - d, 0);
-      D.computedSubtotal.textContent = U.fmt(sub);
-      D.computedTotal.textContent = U.fmt(net);
+      D.computedSubtotal.textContent = U.fmt(net);
     },
-    async submit(e) {
+
+    /** Add the current form item to the cart */
+    addToCart(e) {
       e.preventDefault();
       const name = D.productName.value.trim();
       const qty = parseFloat(D.quantity.value) || 0;
       const unit = D.unit.value;
       const price = parseFloat(D.unitPrice.value) || 0;
       const disc = parseFloat(D.discount.value) || 0;
-      const notes = D.notes.value.trim();
       const sub = qty * price;
-      const total = Math.max(sub - disc, 0);
 
       if (!name) { Toast.err('يرجى إدخال اسم المنتج'); D.productName.focus(); return; }
       if (qty <= 0) { Toast.err('يرجى إدخال كمية صحيحة'); D.quantity.focus(); return; }
       if (price <= 0) { Toast.err('يرجى إدخال سعر الوحدة'); D.unitPrice.focus(); return; }
       if (disc > sub) { Toast.err('الخصم لا يمكن أن يتجاوز الإجمالي'); D.discount.focus(); return; }
 
-      const id = Invoice.generate();
-      const date = U.today();
-      const time = U.timeShort();
-      const rec = {
-        invoiceId: id,
+      Cart.add({
         productName: name,
         quantity: qty,
         unit,
         unitPrice: price,
         discount: disc,
-        totalBeforeDiscount: sub,
-        netTotal: total,
+      });
+
+      // Reset form for next item
+      D.productName.value = '';
+      D.quantity.value = '1';
+      D.unit.value = 'علبة';
+      D.unitPrice.value = '';
+      D.discount.value = '0';
+
+      D.computedSubtotal.textContent = '0.00';
+
+      D.productName.focus();
+    },
+
+    /** Checkout: submit entire cart as a single multi-product invoice */
+    async checkout() {
+      if (!state.cart.length) {
+        Toast.err('السلة فارغة — أضف منتجات أولاً');
+        return;
+      }
+
+      const id = Invoice.generate();
+      const date = U.today();
+      const time = U.timeShort();
+      const notes = D.notes.value.trim();
+      const cartTotals = Cart.totals();
+
+      // Build products array for the API
+      const products = state.cart.map(item => ({
+        productName: item.productName,
+        quantity: item.quantity,
+        unit: item.unit,
+        unitPrice: item.unitPrice,
+        discount: item.discount,
+        totalBeforeDiscount: item.quantity * item.unitPrice,
+        netTotal: Math.max(item.quantity * item.unitPrice - item.discount, 0),
+      }));
+
+      // Build the payload
+      const payload = {
+        invoiceId: id,
+        date,
+        time,
         notes,
         user: 'Admin',
-        date,
-        time
+        products,
+        // Summary fields for backward compat
+        totalBeforeDiscount: cartTotals.subtotal,
+        discount: cartTotals.totalDiscount,
+        netTotal: cartTotals.net,
       };
+
       // Loading state
       const bT = D.submitSale.querySelector('.btn-text');
       const bL = D.submitSale.querySelector('.btn-loader');
       bT.style.display = 'none'; bL.style.display = 'block'; D.submitSale.disabled = true;
 
-      // Optimistic local save
-      state.tx.push(rec);
+      // Optimistic local save — save each product as a separate tx row for dashboard compatibility
+      products.forEach(p => {
+        state.tx.push({
+          invoiceId: id,
+          productName: p.productName,
+          quantity: p.quantity,
+          unit: p.unit,
+          unitPrice: p.unitPrice,
+          discount: p.discount,
+          totalBeforeDiscount: p.totalBeforeDiscount,
+          netTotal: p.netTotal,
+          notes,
+          user: 'Admin',
+          date,
+          time,
+        });
+      });
       U.saveTx();
-      AC.add(name);
       Dash.update();
       TxTable.render();
 
       // Google Sheets
       try {
-        await fetch(CFG.SHEETS_URL, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(rec) });
-        Toast.ok('تم تسجيل عملية البيع بنجاح');
+        await fetch(CFG.SHEETS_URL, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        Toast.ok(`تم تسجيل الفاتورة ${id} بنجاح (${products.length} صنف)`);
       } catch (err) {
         console.error('Sheets:', err);
         Toast.info('تم الحفظ محلياً — سيتم المزامنة لاحقاً');
       }
 
-      // Reset
+      // Clear cart and reset
+      state.cart = [];
+      Cart.render();
       D.salesForm.reset();
       D.computedSubtotal.textContent = '0.00';
-      D.computedTotal.textContent = '0.00';
       D.quantity.value = '1';
       D.discount.value = '0';
       Invoice.refresh();
       bT.style.display = ''; bL.style.display = 'none'; D.submitSale.disabled = false;
       D.productName.focus();
     },
+
     clearDay() {
       if (!confirm('هل أنت متأكد من مسح جميع معاملات اليوم؟')) return;
       const d = U.today();
