@@ -1,0 +1,28 @@
+{
+  "name": "MedFlow — نظام مبيعات الصيدلية",
+  "short_name": "MedFlow",
+  "description": "MedFlow — نظام إدارة مبيعات الصيدلية الذكي",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f6f8fa",
+  "theme_color": "#059669",
+  "orientation": "any",
+  "lang": "ar",
+  "dir": "rtl",
+  "icons": [
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["medical", "business", "productivity"],
+  "shortcuts": [
+    {
+      "name": "عملية بيع جديدة",
+      "short_name": "بيع جديد",
+      "url": "./index.html"
+    }
+  ]
+}
