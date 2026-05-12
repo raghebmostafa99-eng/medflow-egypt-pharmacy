@@ -271,6 +271,7 @@
   };
 
   // ======================== TRANSACTIONS TABLE ========================
+  // update deploy
   const TxTable = {
     render() {
       const rows = state.tx.filter(t => t.date === U.today()).reverse();
